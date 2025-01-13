@@ -534,6 +534,7 @@ def predict_and_generate_manifest(model, dataloader_dict, args, detection_thresh
     fwd_predictions_fps = []
     bck_predictions_fps = []
     durations = []
+    durations_by_fn = {}
     for i, (fn_base, dloader) in enumerate(dataloader_dict.items()):
         if args.is_test and i==3:
             break
@@ -560,13 +561,69 @@ def predict_and_generate_manifest(model, dataloader_dict, args, detection_thresh
 
         fwd_predictions_fps.append(fwd_predictions_fps_by_thresh)
         bck_predictions_fps.append(bck_predictions_fps_by_thresh)
+    
+    if args.is_mixit:
+      # Assemble sts
+      manifests_by_thresh = {}
+      for dt in detection_thresholds:
+          manifest = {'filename' : [], 'fwd_predictions_fp' : [], 'bck_predictions_fp' : [], 'annotations_fp' : [], 'duration_sec' : []}
+          for annotations_fp in sorted(set(annotations_fps)):
+              fn_base = os.path.basename(annotations_fp)[:-4]
+              fp_combined = []
+              for x in fwd_predictions_fps:
+                  if fn_base in x[dt]:
+                      y = pd.read_csv(x[dt], sep='\t')
+                      fp_combined.append(y)
+              # print(len(fp_combined))
+              fp_combined = pd.concat(fp_combined)
+              
+              
+              # NMS
+              
+              bboxes = []
+              detection_probs_sub = []
+              class_idxs_sub = []
+              class_probs_sub = []
+              
+              for _, row in fp_combined.iterrows():
+                  bbox = [row['Begin Time (s)'], row['End Time (s)']]
+                  bboxes.append(bbox)
+                  detection_probs_sub.append(row['Detection Prob'])
+                  class_probs_sub.append(row['Class Prob'])
+                  
+              bboxes = np.array(bboxes)
+              det_probs = np.array(detection_probs_sub)
+              class_idxs = np.zeros_like(det_probs, dtype=int)
+              class_probs = np.array(class_probs_sub)
+              
 
-    manifests_by_thresh = {}
-    for dt in detection_thresholds:
-        fpfps = [x[dt] for x in fwd_predictions_fps]
-        bpfps = [x[dt] for x in bck_predictions_fps]
-        manifest = pd.DataFrame({'filename' : fns, 'fwd_predictions_fp' : fpfps, 'bck_predictions_fp' : bpfps, 'annotations_fp' : annotations_fps, 'duration_sec' : durations})
-        manifests_by_thresh[dt] = manifest
+              if args.nms == "soft_nms":
+                bboxes, det_probs, class_idxs, class_probs = soft_nms(bboxes, det_probs, class_idxs, class_probs, sigma=args.soft_nms_sigma, thresh=dt)
+              elif args.nms == "nms":
+                bboxes, det_probs, class_idxs, class_probs = nms(bboxes, det_probs, class_idxs, class_probs, iou_thresh=args.nms_thresh)
+
+
+              out_fp = os.path.join(os.path.dirname(x[dt]), f"peaks_pred_{fn_base}-detthresh{dt}.txt")
+
+              st = bbox2raven(bboxes, class_idxs, args.label_set, det_probs, class_probs, args.unknown_label)
+              write_tsv(out_fp, st)
+             
+              manifest['filename'].append(fn_base)
+              manifest['fwd_predictions_fp'].append(out_fp)
+              manifest['bck_predictions_fp'].append(None)
+              manifest['annotations_fp'].append(annotations_fp)
+              manifest['duration_sec'].append(120)
+          
+          manifest = pd.DataFrame(manifest)
+          manifests_by_thresh[dt] = manifest
+          
+    else:
+      manifests_by_thresh = {}
+      for dt in detection_thresholds:
+          fpfps = [x[dt] for x in fwd_predictions_fps]
+          bpfps = [x[dt] for x in bck_predictions_fps]
+          manifest = pd.DataFrame({'filename' : fns, 'fwd_predictions_fp' : fpfps, 'bck_predictions_fp' : bpfps, 'annotations_fp' : annotations_fps, 'duration_sec' : durations})
+          manifests_by_thresh[dt] = manifest
     return manifests_by_thresh
 
 #def evaluate_based_on_manifest(manifest, output_dir, results_dir, iou, class_threshold, label_mapping, unknown_label, det_thresh, comb_discard_threshold=0, bidirectional=False):

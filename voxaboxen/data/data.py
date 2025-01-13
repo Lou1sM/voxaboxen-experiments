@@ -304,12 +304,21 @@ def get_val_dataloader(args):
   val_info_df = pd.read_csv(val_info_fp)
 
   val_dataloaders = {}
-
-  for i in range(len(val_info_df)):
-    fn = val_info_df.iloc[i]['fn']
-    audio_fp = val_info_df.iloc[i]['audio_fp']
-    annot_fp = val_info_df.iloc[i]['selection_table_fp']
-    val_dataloaders[fn] = get_single_clip_data(audio_fp, args.clip_duration/2, args, annot_fp = annot_fp)
+  
+  
+  if args.is_mixit:
+    for i in range(len(val_info_df)):
+      for j in range(4):
+        fn = val_info_df.iloc[i]['fn']
+        audio_fp = val_info_df.iloc[i]['audio_fp'].replace('.wav', f'_source{j}.wav')
+        annot_fp = val_info_df.iloc[i]['selection_table_fp']
+        val_dataloaders[f"{fn}_source{j}"] = get_single_clip_data(audio_fp, args.clip_duration/2, args, annot_fp = annot_fp)
+  else:
+    for i in range(len(val_info_df)):
+      fn = val_info_df.iloc[i]['fn']
+      audio_fp = val_info_df.iloc[i]['audio_fp']
+      annot_fp = val_info_df.iloc[i]['selection_table_fp']
+      val_dataloaders[fn] = get_single_clip_data(audio_fp, args.clip_duration/2, args, annot_fp = annot_fp)
 
   return val_dataloaders
 
@@ -318,12 +327,21 @@ def get_test_dataloader(args):
   test_info_df = pd.read_csv(test_info_fp)
 
   test_dataloaders = {}
-
-  for i in range(len(test_info_df)):
-    fn = test_info_df.iloc[i]['fn']
-    audio_fp = test_info_df.iloc[i]['audio_fp']
-    annot_fp = test_info_df.iloc[i]['selection_table_fp']
-    test_dataloaders[fn] = get_single_clip_data(audio_fp, args.clip_duration/2, args, annot_fp = annot_fp)
+  
+  if args.is_mixit:
+    for i in range(len(test_info_df)):
+      for j in range(4):
+        fn = test_info_df.iloc[i]['fn']
+        audio_fp = test_info_df.iloc[i]['audio_fp'].replace('.wav', f'_source{j}.wav')
+        annot_fp = test_info_df.iloc[i]['selection_table_fp']
+        test_dataloaders[f"{fn}_source{j}"] = get_single_clip_data(audio_fp, args.clip_duration/2, args, annot_fp = annot_fp)
+  
+  else:
+    for i in range(len(test_info_df)):
+      fn = test_info_df.iloc[i]['fn']
+      audio_fp = test_info_df.iloc[i]['audio_fp']
+      annot_fp = test_info_df.iloc[i]['selection_table_fp']
+      test_dataloaders[fn] = get_single_clip_data(audio_fp, args.clip_duration/2, args, annot_fp = annot_fp)
 
   return test_dataloaders
 
